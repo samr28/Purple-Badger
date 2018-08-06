@@ -1,7 +1,13 @@
-import side_view_pipeline
 import top_view_pipeline
 import cv2
 import numpy
+import threading
+import queue
+import time
+import json
+
+cam0Frames = queue.Queue()
+out = cv2.VideoWriter("topview.avi", cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 187, (320,240))
 
 accuracyList = [[], []]
 
@@ -17,12 +23,13 @@ def processDart(img, pipeline, centerTargetVal, orientation):
         cv2.line(img, (0, int(height/2)), (width, int(height/2)), (0,0,255), 3)
 
     if(not contours):
+        cv2.imshow("frame", img)
         return
     points = numpy.vstack(contours).squeeze()
     avg = getAverage(points, orientation)
 
     accuracy = (1 - abs((avg - centerTargetVal)/centerTargetVal)) * 100
-    
+
     if(orientation == 0):
         cv2.line(img, (int(avg), 0), (int(avg), height), (0,255,0), 3)
         accuracyList[0].append(accuracy)
@@ -33,8 +40,9 @@ def processDart(img, pipeline, centerTargetVal, orientation):
 
     # Draw found dart in blue
     cv2.drawContours(img, contours, -1, (255, 0, 0), 2)
+    cv2.imshow("frame", img)
 
-    return avg
+    return accuracy
 
 def getAverage(points, orientation):
     pointCount = 0
@@ -45,94 +53,53 @@ def getAverage(points, orientation):
     avg = total/pointCount
 
     return avg
-    
-yList = []
-xList = []
 
-yHeight = None
-yWidth = None
-yChannels = None
-yCap = cv2.VideoCapture('yTest.avi')
+accuracyList = [[], []]
 
-while(yCap.isOpened()):
-    ret, frame = yCap.read() # 1 frame
-    if(ret == False):
-        break
-    
-    if(not yHeight and not yWidth and not yChannels):
-        yHeight, yWidth, yChannels = frame.shape
-    pipeline = top_view_pipeline.Pipeline()
-    y = processDart(frame, pipeline, yHeight/2, 1)
+def captureCam0():
+    cap = cv2.VideoCapture("sideview.avi")
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+    cap.set(cv2.CAP_PROP_FPS, 187)
 
-    cv2.imshow('frame',frame)
+    t_end = time.time() + 5
+    while time.time() < t_end:
+        ret, frame = cap.read()
+        cam0Frames.put(frame)
+        if(ret == False):
+            break
 
-    if(y is not None):
-        yList.append(y)
+def saveFrames(frames):
+    while(not frames.empty()):
+        out.write(cam0Frames.get())
 
-    if cv2.waitKey(25) & 0xFF == ord('q'):
-        break
+def processFrames():
+    i = 0
+    while(not cam0Frames.empty()):
+        if(cam0Frames.qsize() == 1):
+            break
+        frame = cam0Frames.get()
+        #write to video file
+        pipeline = top_view_pipeline.Pipeline()
+        if(i > 278 and i < 286):
+            singleLocation = processDart(frame, pipeline, 240/2, 1)
+            if(singleLocation is not None):
+                accuracyList[0].append(singleLocation)
+            cv2.waitKey()
 
-xHeight = None
-xWidth = None
-xChannels = None
-xCap = cv2.VideoCapture('xTest.avi')
+        i += 1
 
-while(xCap.isOpened()):
-    ret, frame = xCap.read()
-    if(ret == False):
-        break
-    if(not xHeight and not xWidth and not xChannels):
-        xHeight, xWidth, xChannels = frame.shape
-    pipeline = side_view_pipeline.Pipeline()
-    x = processDart(frame, pipeline, xWidth/2, 0)
-    cv2.imshow('frame',frame)
-
-    if(x is not None):
-        xList.append(x)
-
-    if cv2.waitKey(25) & 0xFF == ord('q'):
-        break
+def printJsonResults(x, y):
+    result = {
+        'name': "Shot",
+        'x': x,
+        'y': y
+    }
+    print(json.dumps(result))
 
 
-finalWidth = 500
-finalHeight = 500
-blankImage = numpy.zeros((finalWidth,finalHeight,3), numpy.uint8)
-bHeight, bWidth, bChanncel = blankImage.shape
 
-cv2.circle(blankImage,(int(finalWidth/2),int(finalHeight/2)),20,(0,0,255),1)
-cv2.circle(blankImage,(int(finalWidth/2),int(finalHeight/2)),60,(0,0,255),1)
-cv2.circle(blankImage,(int(finalWidth/2),int(finalHeight/2)),100,(0,0,255),1)
-cv2.circle(blankImage,(int(finalWidth/2),int(finalHeight/2)),140,(0,0,255),1)
-
-xError = (numpy.mean(xList) - (xWidth / 2)) / numpy.mean(xList)
-yError = (numpy.mean(yList) - (yHeight / 2)) / numpy.mean(yList)
-
-print("xError: ", xError)
-print("yError: ", yError)
-
-print("centerX: ", (xWidth/2))
-print("centerY: ", (yHeight/2))
-
-xOffset = xError * finalWidth
-yOffset = yError * finalHeight
-print(f"xOffset: {xOffset}, yOffset: {yOffset}")
-xPos = finalWidth/2 + xOffset
-yPos = finalHeight/2 + yOffset
-
-print(f"centerX: {finalWidth/2}, centerY: {finalHeight/2}")
-print(f"xPos: {xPos}, yPos: {yPos}")
-
-cv2.circle(blankImage,(int(xPos), int(yPos)),18,(0,255,0),-1)
-
-# Draw final accuracy text
-finalAccuracy = round((numpy.mean(accuracyList[0]) + numpy.mean(accuracyList[1])) / 2, 2)
-font = cv2.FONT_HERSHEY_SIMPLEX
-cv2.putText(blankImage,f"Overall Accuracy: {finalAccuracy}%",(30,50), font, 0.8, (255,255,255),1,cv2.LINE_AA)
-
-cv2.destroyAllWindows()
-cv2.imshow("image", blankImage)
-cv2.waitKey()
-
-xCap.release()
-yCap.release()
-cv2.destroyAllWindows()
+captureCam0()
+processFrames()
+printJsonResults(numpy.mean(accuracyList[0]), numpy.mean(accuracyList[0]))
+# saveFrames(cam0Frames)

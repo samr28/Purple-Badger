@@ -12,9 +12,9 @@ class Pipeline:
         """initializes all values to presets or None if need to be set
         """
 
-        self.__rgb_threshold_red = [0.0025492267160191207, 92.52288694159027]
-        self.__rgb_threshold_green = [77.43717501486617, 252.17638364795974]
-        self.__rgb_threshold_blue = [74.80446363443026, 255.0]
+        self.__rgb_threshold_red = [0.0, 90.53140916808149]
+        self.__rgb_threshold_green = [0.0, 90.707979626485553]
+        self.__rgb_threshold_blue = [0.0, 255.0]
 
         self.rgb_threshold_output = None
 
@@ -24,17 +24,17 @@ class Pipeline:
         self.find_contours_output = None
 
         self.__filter_contours_contours = self.find_contours_output
-        self.__filter_contours_min_area = 1000.0
+        self.__filter_contours_min_area = 100.0
         self.__filter_contours_min_perimeter = 0.0
-        self.__filter_contours_min_width = 0.0
-        self.__filter_contours_max_width = 1000.0
+        self.__filter_contours_min_width = 10
+        self.__filter_contours_max_width = 1000
         self.__filter_contours_min_height = 0.0
-        self.__filter_contours_max_height = 50.0
-        self.__filter_contours_solidity = [70, 100]
-        self.__filter_contours_max_vertices = 200.0
-        self.__filter_contours_min_vertices = 0.0
-        self.__filter_contours_min_ratio = 0.0
-        self.__filter_contours_max_ratio = 1000.0
+        self.__filter_contours_max_height = 70.0
+        self.__filter_contours_solidity = [0, 100]
+        self.__filter_contours_max_vertices = 80.0
+        self.__filter_contours_min_vertices = 0
+        self.__filter_contours_min_ratio = 0
+        self.__filter_contours_max_ratio = 1000
 
         self.filter_contours_output = None
 
@@ -46,7 +46,6 @@ class Pipeline:
         # Step RGB_Threshold0:
         self.__rgb_threshold_input = source0
         (self.rgb_threshold_output) = self.__rgb_threshold(self.__rgb_threshold_input, self.__rgb_threshold_red, self.__rgb_threshold_green, self.__rgb_threshold_blue)
-
         # Step Find_Contours0:
         self.__find_contours_input = self.rgb_threshold_output
         (self.find_contours_output) = self.__find_contours(self.__find_contours_input, self.__find_contours_external_only)
